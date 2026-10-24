@@ -13,7 +13,7 @@ const SAMPLE_ANSWERS = {
     'In distributed systems, eventual consistency means that given no new updates, all replicas will eventually return the latest value. We trade strong consistency for higher availability and partition tolerance according to the CAP theorem. DynamoDB and Cassandra use this model by quorum reads and writes.',
 };
 
-export default function InterviewPanel({ onInterviewCompleted }) {
+export default function InterviewPanel({ onInterviewCompleted, resetTrigger }) {
   const [role, setRole] = useState('Software Engineer (Backend)');
   const [sessionState, setSessionState] = useState('setup'); // 'setup' | 'loading_question' | 'answering' | 'evaluating' | 'reviewed' | 'finished'
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0); // 0 to 4 (5 questions)
@@ -24,14 +24,32 @@ export default function InterviewPanel({ onInterviewCompleted }) {
   const [error, setError] = useState(null);
   const [overallMeanScore, setOverallMeanScore] = useState(null);
 
+  // Step 7: Reset to clean initial state when reset is triggered
+  useEffect(() => {
+    if (resetTrigger) {
+      setSessionState('setup');
+      setHistory([]);
+      setCurrentQuestionIndex(0);
+      setCurrentQuestion('');
+      setCandidateAnswer('');
+      setCurrentEvaluation(null);
+      setError(null);
+      setOverallMeanScore(null);
+      fetchMeanScore();
+    }
+  }, [resetTrigger]);
+
   const fetchMeanScore = async () => {
     try {
-      const resp = await fetch('/api/interview/progress');
+      let resp;
+      try {
+        resp = await fetch('/api/interview/progress');
+      } catch (e) {
+        resp = await fetch('http://127.0.0.1:8000/api/interview/progress');
+      }
       if (resp.ok) {
         const data = await resp.json();
-        if (data.mean_interview_score !== null) {
-          setOverallMeanScore(data.mean_interview_score);
-        }
+        setOverallMeanScore(data.mean_interview_score);
       }
     } catch (e) {
       console.warn('Could not fetch interview progress', e);
@@ -63,15 +81,27 @@ export default function InterviewPanel({ onInterviewCompleted }) {
       .join(' | ');
 
     try {
-      const resp = await fetch('/api/interview/next', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role, history: historyContext }),
-      });
+      let resp;
+      try {
+        resp = await fetch('/api/interview/next', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role, history: historyContext }),
+        });
+      } catch (e) {
+        resp = await fetch('http://127.0.0.1:8000/api/interview/next', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role, history: historyContext }),
+        });
+      }
 
       if (!resp.ok) {
         const errData = await resp.json().catch(() => ({}));
-        throw new Error(errData.detail || `Server returned ${resp.status}`);
+        if (resp.status === 429) {
+          throw new Error('Rate limit reached on Groq free-tier (token/min limit). Please wait a few seconds and retry.');
+        }
+        throw new Error(errData.detail || `Server returned status ${resp.status}`);
       }
 
       const data = await resp.json();
@@ -80,7 +110,7 @@ export default function InterviewPanel({ onInterviewCompleted }) {
       setSessionState('answering');
     } catch (err) {
       console.error(err);
-      setError(err.message || 'Failed to load next interview question.');
+      setError(err.message || 'Failed to load next interview question. Please try again.');
       setSessionState(existingHistory.length > 0 ? 'reviewed' : 'setup');
     }
   };
@@ -95,19 +125,35 @@ export default function InterviewPanel({ onInterviewCompleted }) {
     setError(null);
 
     try {
-      const resp = await fetch('/api/interview/evaluate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          role,
-          question: currentQuestion,
-          answer: candidateAnswer.trim(),
-        }),
-      });
+      let resp;
+      try {
+        resp = await fetch('/api/interview/evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            role,
+            question: currentQuestion,
+            answer: candidateAnswer.trim(),
+          }),
+        });
+      } catch (e) {
+        resp = await fetch('http://127.0.0.1:8000/api/interview/evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            role,
+            question: currentQuestion,
+            answer: candidateAnswer.trim(),
+          }),
+        });
+      }
 
       if (!resp.ok) {
         const errData = await resp.json().catch(() => ({}));
-        throw new Error(errData.detail || `Server returned ${resp.status}`);
+        if (resp.status === 429) {
+          throw new Error('Rate limit reached on Groq free-tier (token/min limit). Please wait a few seconds and retry.');
+        }
+        throw new Error(errData.detail || `Server returned status ${resp.status}`);
       }
 
       const evalData = await resp.json();
@@ -132,7 +178,7 @@ export default function InterviewPanel({ onInterviewCompleted }) {
       }
     } catch (err) {
       console.error(err);
-      setError(err.message || 'Failed to evaluate answer.');
+      setError(err.message || 'Failed to evaluate answer. Please try again.');
       setSessionState('answering');
     }
   };

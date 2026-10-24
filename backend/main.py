@@ -25,6 +25,7 @@ from backend.db import (
     save_interview_score,
     get_mean_interview_score,
     get_all_interview_scores,
+    reset_db,
     STANDARD_TOPICS,
 )
 
@@ -383,6 +384,17 @@ def get_dashboard_progress():
         "total_quiz_attempts": len(quiz_attempts),
         "total_interview_evaluations": len(interview_evals),
     }
+
+# ==================== STEP 7: DEMO DATA RESET ENDPOINT ====================
+
+@app.post("/api/reset")
+def reset_demo_data():
+    """
+    Step 7 Polish: Returns the dashboard to a clean demo state (§7.7, §10).
+    Clears last ATS score, quiz attempts, and interview scores from SQLite.
+    """
+    reset_db()
+    return {"ok": True, "message": "Demo data reset successfully"}
 
 if __name__ == "__main__":
     import uvicorn

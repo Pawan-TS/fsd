@@ -113,4 +113,36 @@
    - Unattempted topics in bar chart rendered in light slate (`#cbd5e1`).
    - Clean pastel accent badges: Emerald (`bg-emerald-50 text-emerald-800 border-emerald-200`), Violet/Indigo (`bg-indigo-50 text-indigo-700 border-indigo-200`), Pink (`bg-pink-50 text-pink-700 border-pink-200`), and Amber (`bg-amber-50 text-amber-800 border-amber-200`).
 
+## Build Step 7: Polish for the Demo & Verification
+
+### Assumptions & Polish Implementations
+1. **Reset Demo Data (`POST /api/reset` & Navbar Button)**:
+   - Added `reset_db()` in `backend/db.py` that clears `demo_state` (sets `last_ats_score = NULL`), `DELETE FROM quiz_attempts`, and `DELETE FROM interview_scores`.
+   - Exposed `POST /api/reset` in `backend/main.py`.
+   - Added a red-accented "Reset Demo Data" button in `App.jsx` navbar with an animated spinner during the request and a transient toast notification on completion.
+   - Wired `resetTrigger` across panels:
+     - `ResumePanel`: restores `SAMPLE_MATCHING_RESUME` and `SAMPLE_MATCHING_JD`, clears previous ATS score and recommendations.
+     - `QuizPanel`: calls `resetQuiz()`, resetting active quiz to idle, clearing questions/answers/results, and reloading topic stats.
+     - `InterviewPanel`: resets session state to setup, clears question index, history, candidate answers, and re-syncs mean score.
+     - `ProgressPanel`: automatically re-fetches aggregated progress, returning topic accuracies to 0.0%, readiness to "Not enough data yet" (Score: N/A), and resetting the 3 weakest recommended topics.
+2. **Loading Spinners on Every LLM Call (§7.7, §10)**:
+   - Panel 1 (Resume): Animated SVG spinner on "Analyze Match & Suggestions" and PDF upload button.
+   - Panel 2 (Quiz): Animated SVG spinner during MCQ generation (`generating`) and during test submission/scoring (`submitting`). Questions remain visible during grading.
+   - Panel 3 (Interview): Animated SVG spinner during next question generation (`loading_question`) and during answer evaluation (`evaluating`).
+3. **Graceful Error Handling & Groq Rate Limits (D4a, D5)**:
+   - All panels handle Groq HTTP 429 rate limits with clear, friendly user alerts suggesting a brief pause.
+   - Fallback recommendations and graceful degradation prevent portal crashes on network timeouts or JSON parsing glitches.
+4. **"Demo Estimate, Not a Prediction" Label (§7.7, §9, D10)**:
+   - Prominently displayed in Panel 4 next to the readiness score and within the metrics breakdown card.
+5. **Pre-filled Sample Data (§7.7)**:
+   - Panel 1 initializes with realistic Backend Engineer resume and matching job description so the portal never opens to empty fields.
+   - Also includes quick "Load Unrelated JD (Graphic Designer)" toggle to demonstrate ATS score contrast in seconds.
+   - Panel 3 includes "Paste Sample Technical Answer" for quick, frictionless interview demo runs.
+6. **Verification against §10 Definition of Done**:
+   - [x] Backend and frontend start cleanly with README commands (`uvicorn` and `npm run dev`).
+   - [x] All 4 panels operational against real Groq LLM with spinners and error handling.
+   - [x] 5-minute demo flow runs without code modifications.
+   - [x] "Reset Demo Data" restores database and UI to clean baseline.
+   - [x] Zero API keys committed; `.env` configuration documented in README.
+
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const SAMPLE_MATCHING_RESUME = `Alex Chen - Software Engineer
 Email: alex.chen@example.com | GitHub: github.com/alexchen
@@ -39,13 +39,23 @@ REQUIREMENTS:
 - Experience conducting photoshoot art direction and storyboard illustration.
 - Portfolio demonstrating creative branding, editorial layouts, and vector artwork.`;
 
-export default function ResumePanel({ onAtsCalculated }) {
+export default function ResumePanel({ onAtsCalculated, resetTrigger }) {
   const [resumeText, setResumeText] = useState(SAMPLE_MATCHING_RESUME);
   const [jdText, setJdText] = useState(SAMPLE_MATCHING_JD);
   const [loading, setLoading] = useState(false);
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+
+  // Step 7: Reset to clean pre-filled sample state when reset is triggered
+  useEffect(() => {
+    if (resetTrigger) {
+      setResumeText(SAMPLE_MATCHING_RESUME);
+      setJdText(SAMPLE_MATCHING_JD);
+      setResult(null);
+      setError(null);
+    }
+  }, [resetTrigger]);
 
   const handlePdfUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -62,10 +72,18 @@ export default function ResumePanel({ onAtsCalculated }) {
       const formData = new FormData();
       formData.append('file', file);
 
-      const resp = await fetch('/api/extract-pdf', {
-        method: 'POST',
-        body: formData,
-      });
+      let resp;
+      try {
+        resp = await fetch('/api/extract-pdf', {
+          method: 'POST',
+          body: formData,
+        });
+      } catch (e) {
+        resp = await fetch('http://127.0.0.1:8000/api/extract-pdf', {
+          method: 'POST',
+          body: formData,
+        });
+      }
 
       if (!resp.ok) {
         throw new Error(`PDF upload failed with status ${resp.status}`);
@@ -93,15 +111,27 @@ export default function ResumePanel({ onAtsCalculated }) {
     setError(null);
 
     try {
-      const resp = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resume: resumeText, jd: jdText }),
-      });
+      let resp;
+      try {
+        resp = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resume: resumeText, jd: jdText }),
+        });
+      } catch (e) {
+        resp = await fetch('http://127.0.0.1:8000/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resume: resumeText, jd: jdText }),
+        });
+      }
 
       if (!resp.ok) {
         const errorData = await resp.json().catch(() => ({}));
-        throw new Error(errorData.detail || `Server returned ${resp.status}`);
+        if (resp.status === 429) {
+          throw new Error('Rate limit reached on Groq free-tier (token/min limit). Please wait a few seconds and retry.');
+        }
+        throw new Error(errorData.detail || `Server returned status ${resp.status}. Please check your connection or Groq API key.`);
       }
 
       const data = await resp.json();
@@ -111,7 +141,7 @@ export default function ResumePanel({ onAtsCalculated }) {
       }
     } catch (err) {
       console.error(err);
-      setError(err.message || 'Analysis failed. Please check your connection and try again.');
+      setError(err.message || 'Analysis failed. Please check your connection or Groq API key in .env and try again.');
     } finally {
       setLoading(false);
     }

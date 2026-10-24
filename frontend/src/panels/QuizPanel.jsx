@@ -9,7 +9,7 @@ const TOPICS = [
   { id: 'Aptitude', name: 'Quantitative & Logic', desc: 'Reasoning, Math & Placements' },
 ];
 
-export default function QuizPanel({ activeTopicOverride, onQuizCompleted }) {
+export default function QuizPanel({ activeTopicOverride, onQuizCompleted, resetTrigger }) {
   const [topic, setTopic] = useState('DBMS');
   const [count, setCount] = useState(5);
   const [status, setStatus] = useState('idle'); // 'idle' | 'generating' | 'active' | 'submitting' | 'completed'
@@ -25,9 +25,21 @@ export default function QuizPanel({ activeTopicOverride, onQuizCompleted }) {
     }
   }, [activeTopicOverride]);
 
+  // Step 7: Reset to clean initial state when reset is triggered
+  useEffect(() => {
+    if (resetTrigger) {
+      resetQuiz();
+    }
+  }, [resetTrigger]);
+
   const fetchTopicStats = async () => {
     try {
-      const resp = await fetch('/api/quiz/progress');
+      let resp;
+      try {
+        resp = await fetch('/api/quiz/progress');
+      } catch (e) {
+        resp = await fetch('http://127.0.0.1:8000/api/quiz/progress');
+      }
       if (resp.ok) {
         const data = await resp.json();
         setTopicAccuracies(data.topic_accuracies || {});
@@ -48,15 +60,27 @@ export default function QuizPanel({ activeTopicOverride, onQuizCompleted }) {
     setResult(null);
 
     try {
-      const resp = await fetch('/api/quiz/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, count: Number(count) }),
-      });
+      let resp;
+      try {
+        resp = await fetch('/api/quiz/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic, count: Number(count) }),
+        });
+      } catch (e) {
+        resp = await fetch('http://127.0.0.1:8000/api/quiz/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic, count: Number(count) }),
+        });
+      }
 
       if (!resp.ok) {
         const errData = await resp.json().catch(() => ({}));
-        throw new Error(errData.detail || `Server returned ${resp.status}`);
+        if (resp.status === 429) {
+          throw new Error('Rate limit reached on Groq free-tier (token/min limit). Please wait a few seconds and retry.');
+        }
+        throw new Error(errData.detail || `Server returned status ${resp.status}`);
       }
 
       const data = await resp.json();
@@ -68,7 +92,7 @@ export default function QuizPanel({ activeTopicOverride, onQuizCompleted }) {
       setStatus('active');
     } catch (err) {
       console.error(err);
-      setError(err.message || 'Failed to generate quiz. Please retry.');
+      setError(err.message || 'Failed to generate quiz. Please retry in a few moments.');
       setStatus('idle');
     }
   };
@@ -99,18 +123,30 @@ export default function QuizPanel({ activeTopicOverride, onQuizCompleted }) {
         question: q.question,
       }));
 
-      const resp = await fetch('/api/quiz/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          topic,
-          answers: answersPayload,
-        }),
-      });
+      let resp;
+      try {
+        resp = await fetch('/api/quiz/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            topic,
+            answers: answersPayload,
+          }),
+        });
+      } catch (e) {
+        resp = await fetch('http://127.0.0.1:8000/api/quiz/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            topic,
+            answers: answersPayload,
+          }),
+        });
+      }
 
       if (!resp.ok) {
         const errData = await resp.json().catch(() => ({}));
-        throw new Error(errData.detail || `Server returned ${resp.status}`);
+        throw new Error(errData.detail || `Server returned status ${resp.status}`);
       }
 
       const data = await resp.json();
@@ -124,7 +160,7 @@ export default function QuizPanel({ activeTopicOverride, onQuizCompleted }) {
       }
     } catch (err) {
       console.error(err);
-      setError(err.message || 'Failed to submit quiz.');
+      setError(err.message || 'Failed to submit quiz. Please try again.');
       setStatus('active');
     }
   };
@@ -233,7 +269,7 @@ export default function QuizPanel({ activeTopicOverride, onQuizCompleted }) {
       )}
 
       {/* Active Test Taking View */}
-      {status === 'active' && (
+      {(status === 'active' || status === 'submitting') && (
         <div className="space-y-5">
           {/* Progress Header */}
           <div className="flex items-center justify-between text-xs text-slate-500 border-b border-slate-200 pb-2">
@@ -272,6 +308,7 @@ export default function QuizPanel({ activeTopicOverride, onQuizCompleted }) {
                         type="button"
                         id={`question-${qIdx}-option-${optIdx}`}
                         onClick={() => handleSelectOption(qIdx, optIdx)}
+                        disabled={status === 'submitting'}
                         className={`text-left p-2.5 rounded-lg text-xs font-medium border transition ${
                           isSelected
                             ? 'bg-violet-50 border-violet-500 text-violet-900 ring-1 ring-violet-500 shadow-xs'
@@ -304,15 +341,26 @@ export default function QuizPanel({ activeTopicOverride, onQuizCompleted }) {
               id="submit-quiz-btn"
               type="button"
               onClick={handleSubmit}
-              disabled={answeredCount === 0}
-              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-medium text-xs sm:text-sm shadow-md shadow-emerald-500/20 transition disabled:opacity-50"
+              disabled={answeredCount === 0 || status === 'submitting'}
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-medium text-xs sm:text-sm shadow-md shadow-emerald-500/20 transition disabled:opacity-50 flex items-center gap-2"
             >
-              Submit Test &amp; Calculate Score
+              {status === 'submitting' ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                  <span>Scoring &amp; Saving Results...</span>
+                </>
+              ) : (
+                <span>Submit Test &amp; Calculate Score</span>
+              )}
             </button>
             <button
               type="button"
               onClick={resetQuiz}
-              className="text-xs text-slate-500 hover:text-slate-800 transition"
+              disabled={status === 'submitting'}
+              className="text-xs text-slate-500 hover:text-slate-800 transition disabled:opacity-50"
             >
               Cancel
             </button>

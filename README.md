@@ -68,8 +68,10 @@ Open your browser at `http://localhost:5173`.
    - Review Question 1, paste or type an answer (or click *"Paste Sample Technical Answer"* for speed), and click **"Submit Answer for Evaluation"**.
    - Review 1–10 rubric scores, model answer, and coaching tip. Step through the remaining questions to complete the session.
 4. **Inspect Placement Readiness & Weakest Topics (Panel 4):**
-   - View the updated **Placement Readiness Score** and **Per-Topic Accuracy** bar chart.
+   - View the updated **Placement Readiness Score** and **Per-Topic Accuracy** bar chart (with the `"demo estimate, not a prediction"` label).
    - Click any recommended subject under **"Recommended Next Practice (3 Weakest Topics)"** $\rightarrow$ Panel 2 automatically pre-selects that topic and smoothly scrolls into view for instant targeted practice.
+5. **Reset Demo Data (Navbar):**
+   - Click **"Reset Demo Data"** at the top right $\rightarrow$ Clears SQLite database (`placement_demo.sqlite3`), resets all 4 panels back to a clean baseline, restores pre-filled sample text, and resets readiness to "Not enough data yet".
 
 ---
 
